@@ -1,4 +1,5 @@
 #include "LedControl.h" //  need the library
+#include <binary.h>
 #include <LiquidCrystal.h>
 #include <EEPROM.h>
 //LCD pins
@@ -64,6 +65,9 @@ const int settingsOption = 2;
 const int changeNameOption = 3;
 int nextSetting;
 
+//game over screen
+long gameOverTime = 0;
+int gameOverScreenDelay = 3000;
 //joystick pins
 const int pinSW = 0;
 const int pinX = A0;
@@ -110,10 +114,41 @@ int playerRow = 7;
 int shotActive = 0;
 int shotRow;
 int shotCol;
-const int shotDelay = 30;
+const int shotDelay = 20;
 long lastShotMove = 0;
 long gameplayStartTime = 0;
 long gameplayTimeLimit = 10000;
+
+//matrix and blocks
+int maxBlocksRow = 0;// how many rows are actually occupied by blocks
+int lastColumnNr = 7;// from 0 to 7
+int lastRowNr = 6;// row nr 7 is the player row
+int rowGeneratingTime = 5000;// time between generating two rows of blocks
+long lastGeneratedRowTime = 0;
+int blocksPerRow = 6;// no of blocks per generated row
+int randomColumns[] = {0, 1, 2, 3, 4, 5, 6, 7}; // will be randomized for picking x random positions
+//oneColumnAtATime[x] returns a byte array with a "1" on index x
+long newRow;
+const long oneColumnAtATime[] = {
+         10000000,
+          1000000,
+           100000,
+            10000,
+             1000,
+              100,
+               10,
+                1,
+    };
+long blankRow = 100000000;
+long blockRows[] = {
+        100000000,
+        100000000,
+        100000000,
+        100000000,
+        100000000,
+        100000000,
+        100000000,
+    };
 
 //eeprom and high scores
 const int nrOfHighScores = 3;
@@ -250,14 +285,56 @@ void printStartMenu(){
   lcd.print(next());
 }
 
+// randomizes randomColumns array
+void randomizeArray(){
+  const int questionCount = sizeof randomColumns / sizeof randomColumns[0];
+  for (int i=0; i < questionCount; i++) {
+     int n = random(0, questionCount);  // Integer from 0 to questionCount-1
+     int temp = randomColumns[n];
+     randomColumns[n] =  randomColumns[i];
+     randomColumns[i] = temp;
+  }
+}
+
+void generateRow(){
+  randomizeArray();
+  newRow = blankRow;
+  for(int i = 0; i < blocksPerRow; i++){ // take first blocksPerRow elements in array
+    int x = randomColumns[i]; // random column
+    newRow += oneColumnAtATime[x]; //adding 1 on that column
+  }
+  maxBlocksRow ++;//increase the number of occupied rows
+  for(int j = maxBlocksRow; j > 0; j--){
+    blockRows[j] = blockRows[j-1];
+  }
+  blockRows[0] = newRow;
+}
+
+void switchMatrix(bool val){
+  //val == true  => turn on  matrix
+  //val == false => turn off matrix
+  long row;
+  int ledVal;
+  for(int i = 0; i <= maxBlocksRow; i++){
+    row = blockRows[i];
+    for(int j = lastColumnNr; j >= 0; j--){
+      ledVal = row % 10;
+      row = row / 10;
+      if(ledVal){
+        lc.setLed(0, i, j, val);
+      }
+    }
+  }
+}
+
+
 void startGame(){
   score = 0;
   lc.setLed(0, playerRow, playerPos, true); // turns on LED at col, row
   stage = gameplayStage;
-  gameplayStartTime = millis();
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("Time:");
+  lcd.print("Level: ");
   lcd.setCursor(13, 0);
   for(int i = 0; i < 3; i++){
     lcd.print ((char) 0x06);
@@ -268,17 +345,62 @@ void startGame(){
   lcd.print(score);
 }
 
+void play(){
+  Serial.println("play1");
+  movePlayer();
+  Serial.println("play2");
+  if(joyDown == true || maxBlocksRow > lastRowNr){
+    switchMatrix(false);
+    lc.setLed(0, playerRow, playerPos, false);
+    stage = gameOverStage;
+    gameOverTime = millis();
+    lcdStateChange = 1;
+    uploadScore();
+  }
+  Serial.println("play3");
+  if(shotActive){
+    if(millis() - lastShotMove > shotDelay){
+      lastShotMove = millis();
+      lc.setLed(0, shotRow, shotCol, false);
+      shotRow -= 1;
+      if(shotRow >= 0)
+        lc.setLed(0, shotRow, shotCol, true);
+      else
+        shotActive = 0;
+    }
+  }
+  Serial.println("play4");
+  if(clicked && !shotActive){
+    clicked = false;
+    shotActive = 1;
+    shotRow = 6; // the row the shot appears on;
+    score++;
+    lcd.setCursor(10, 1);
+    lcd.print(score);
+    lastShotMove = millis();
+    shotCol = playerPos;
+    lc.setLed(0, shotRow, shotCol, true);
+  }
+  Serial.println("play5");
+  if(millis() - lastGeneratedRowTime > rowGeneratingTime && !shotActive){
+    Serial.println("test1");
+    switchMatrix(false);
+    Serial.println("test2");
+    generateRow();
+    Serial.println("test3");
+    lastGeneratedRowTime = millis();
+    Serial.println("test4");
+    switchMatrix(true);
+    Serial.println("test5");
+  }
+  Serial.println("play6");
+  
+}
 
 void downloadHighScores(){
   for(int i = 0; i < nrOfHighScores; i++){
     highScores[i] = EEPROM.read(i * highScoresOffset);
-    Serial.print(i);
-    Serial.print(") score: ");
-    Serial.print(highScores[i]);
-    Serial.print(", len: ");
     int hsNameLen = EEPROM.read((i + 1) * highScoresNamesOffset);
-    Serial.print(hsNameLen);
-    Serial.print(", name: ");
     char hsChar;
     String hsName = "";
     for(int j = 0; j < hsNameLen; j++){
@@ -286,8 +408,6 @@ void downloadHighScores(){
       hsName = hsName + hsChar;
     }
     highScoresNames[i] = hsName;
-    Serial.print(hsName);
-    Serial.println("");
   }
 }
 
@@ -326,17 +446,17 @@ void uploadScore(){
       highScoresNames[2] = playerName;
     }
   }
-    for(int i = 0; i < nrOfHighScores; i++){
-      EEPROM.write(i * highScoresOffset, highScores[i]);
-      //String hsName = highScoresNames[i];
-      int hsNameLen = highScoresNames[i].length();
-      char c;
-      EEPROM.write((i + 1) * highScoresNamesOffset, hsNameLen);
-      for(int j = 0; j < hsNameLen; j++){
-        c = highScoresNames[i][j];
-        EEPROM.write((i + 1) * highScoresNamesOffset + 1 + j, c);
-      }
+  for(int i = 0; i < nrOfHighScores; i++){
+    EEPROM.write(i * highScoresOffset, highScores[i]);
+    //String hsName = highScoresNames[i];
+    int hsNameLen = highScoresNames[i].length();
+    char c;
+    EEPROM.write((i + 1) * highScoresNamesOffset, hsNameLen);
+    for(int j = 0; j < hsNameLen; j++){
+      c = highScoresNames[i][j];
+      EEPROM.write((i + 1) * highScoresNamesOffset + 1 + j, c);
     }
+  }
 }
 //change the current character in the name selection screen
 //the character is innitialized with " " (space)
@@ -445,7 +565,7 @@ void gameOverScreen(){
     lcd.print("Score: ");
     lcd.print(score);
   }
-  if(clicked){
+  if(clicked && millis() - gameOverTime > gameOverScreenDelay){
     stage = gameMenuStage;
     lcdStateChange = 1;
   }
@@ -533,17 +653,7 @@ int settingValue(int settingIndex){
 
 void loop(){
   joyStickListener();
-  if(shotActive){
-    if(millis() - lastShotMove > shotDelay){
-      lastShotMove = millis();
-      lc.setLed(0, shotRow, shotCol, false);
-      shotRow -= 1;
-      if(shotRow >= 0)
-        lc.setLed(0, shotRow, shotCol, true);
-      else
-        shotActive = 0;
-    }
-  }
+  
   if(!highScoresInitialized){
     downloadHighScores();
     downloadSettings();
@@ -601,42 +711,9 @@ void loop(){
     
   }
   if(stage == gameplayStage){
-    if(millis() - gameplayStartTime > gameplayTimeLimit){
-      stage = gameOverStage;
-      lcdStateChange = 1;
-      uploadScore();
-      //score = 0;
-    }
-    
-    lcd.setCursor(5, 0);
-    int timeLeft = (gameplayTimeLimit - (millis() - gameplayStartTime)) / 100;
-    lcd.print(timeLeft/10);
-    lcd.print(".");
-    if(timeLeft%10%3 == 0 || timeLeft%10%5 == 0)
-      lcd.print(timeLeft%10);
-    
-    movePlayer();
-    if(clicked && !shotActive){
-      clicked = false;
-      shotActive = 1;
-      shotRow = 6; // the row the shot appears on;
-      score++;
-      lcd.setCursor(10, 1);
-      lcd.print(score);
-      lastShotMove = millis();
-      shotCol = playerPos;
-      lc.setLed(0, shotRow, shotCol, true);
-    }
+    play();
   }
   if(stage == gameMenuStage){
-    for(int i = 0; i < nrOfHighScores; i++){
-      Serial.print(i);
-      Serial.print(") score: ");
-      Serial.print(highScores[i]);
-      Serial.print(", name: ");
-      Serial.print(highScoresNames[i]);
-      Serial.println("");
-    }
     if(lcdStateChange){
       printStartMenu();
       lcdStateChange = 0;
