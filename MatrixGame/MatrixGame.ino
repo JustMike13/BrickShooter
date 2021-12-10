@@ -91,7 +91,7 @@ long lastButtonPress = 0;
 const long buttonPressDelay = 200;
 
 //game stage values
-int stage = 1;
+int stage = 0;
 const int welcomeScreenStage = 0;
 const int enterNameStage1 = 1;
 const int enterNameStage2 = 2;
@@ -114,8 +114,10 @@ int playerRow = 7;
 int shotActive = 0;
 int shotRow;
 int shotCol;
+int lastShotRow = 0;
 const int shotDelay = 20;
 long lastShotMove = 0;
+long shotLandingRow = 0;
 long gameplayStartTime = 0;
 long gameplayTimeLimit = 10000;
 
@@ -363,10 +365,11 @@ void play(){
       lastShotMove = millis();
       lc.setLed(0, shotRow, shotCol, false);
       shotRow -= 1;
-      if(shotRow >= 0)
+      if(shotRow >= shotLandingRow)
         lc.setLed(0, shotRow, shotCol, true);
       else
         shotActive = 0;
+        switchMatrix(true);
     }
   }
   Serial.println("play4");
@@ -375,6 +378,7 @@ void play(){
     shotActive = 1;
     shotRow = 6; // the row the shot appears on;
     score++;
+    calculateShotLandingRow();
     lcd.setCursor(10, 1);
     lcd.print(score);
     lastShotMove = millis();
@@ -395,6 +399,27 @@ void play(){
   }
   Serial.println("play6");
   
+}
+
+void calculateShotLandingRow(){
+  int curRow = shotRow;
+  int block;
+  int divider;
+  while(curRow > 0){
+    long nextRow = blockRows[curRow - 1];
+    divider = 10^(lastColumnNr - shotCol);
+    block = nextRow/divider%10;
+    if(block){
+      break;
+    }else{
+      curRow --;
+    }
+  }
+  shotLandingRow = curRow;
+}
+
+void addBlock(){
+  blockRows[shotLandingRow] += oneColumnAtATime[shotCol];
 }
 
 void downloadHighScores(){
