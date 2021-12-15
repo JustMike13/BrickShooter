@@ -4,10 +4,10 @@
 #include <EEPROM.h>
 //LCD pins
 const int RS = 7;
-const int enable = 6;
+const int enable = A5;
 const int d5 = 4;
 const int d4 = 5;
-const int d6 = 3;
+const int d6 = 13;
 const int d7 = 2;
 const int contrastPin = 9;
 int contrastLevel;// contrast = level * multiplier
@@ -15,10 +15,10 @@ int contrastMult = 10;
 int contrastOffset = 50;
 int contrastAddress = 50; //EEPROM address
 const int brightnessPin = 10;
-int brightnessLevel;
+int LCDBrightnessLevel;
 int brightnessMult = 20;
-int brightnessOffset = 50;
-int brightnessAddress = 60; //EEPROM address
+int LCDBrightnessOffset = 50;
+int LCDBrightnessAddress = 60; //EEPROM address
 LiquidCrystal lcd(RS,enable, d4, d5, d6, d7);
 int lcdStateChange = 1;
 
@@ -29,6 +29,19 @@ const int loadPin = 8;
 const int rows = 8;
 const int cols = 8;
 LedControl lc = LedControl(dinPin, clockPin, loadPin, 1); //DIN, CLK, LOAD, No. DRIVER
+const int matrixBrightnessOffset = 0;
+int matrixBrightnessLevel = 6;
+int matrixBrightnessAddress = 65;
+
+//buzzer
+int buzzPin = A3;
+int buzzClickDuration = 50;
+int menuClickSound = 6000;
+int buzzChangeOptionDuration = 30;
+int changeOptionSound = 8000;
+int buzzChangeSettingDuration = 30;
+int changeSettingSound = 4000;
+
 //start menu screen related values
 String texts[] = {"Welcome to", "Mike's BrickShot", "Click to enter"};
 const int textSizes[] = {10, 16, 14};
@@ -39,9 +52,10 @@ const int charDisplayDelay = 150;
 const int textDisplayDelay = 500;
 //menu related values
 int curOption = 0; //pozitia optiunii din menuOptions 
-const int nrOptions = 4;
-String menuOptions[] = {"Start Game", "High Scores", "Settings", "Change Name"}; // optiunile de selectie din meniu
+const int nrOptions = 5;
+String menuOptions[] = {"Start Game", "High Scores", "Settings", "Change Name", "Delete scores"}; // optiunile de selectie din meniu
 const int startGameOption = 0;
+const int deleteScoresOption = 4;
 String current(){
   return menuOptions[curOption];
 }
@@ -55,12 +69,16 @@ String next(){
 const int highScoresOption = 1;
 int highScoreInFocus = 0;
 
-//Setings screee
+//Setings screen
+int soundSwitchPin = 6;
+int soundSwitchValue;
+int lastSoundSwitchValue = 0;
+int pinSoundLED = 3;
 int curSetting = 0;
-int nrOfSettings = 3;
+int nrOfSettings = 4;
 bool soundOn = 1;
 int soundAddress = 70;//EEPROM address
-String settingsMenu[] = {"Sound", "Contrast", "Brightness"};
+String settingsMenu[] = {"Sound", "Contrast", "LCD bri.", "Matrix bri."};
 const int settingsOption = 2;
 const int changeNameOption = 3;
 int nextSetting;
@@ -68,8 +86,9 @@ int nextSetting;
 //game over screen
 long gameOverTime = 0;
 int gameOverScreenDelay = 3000;
+
 //joystick pins
-const int pinSW = 0;
+const int pinSW = A2;
 const int pinX = A0;
 const int pinY = A1;
 
@@ -121,11 +140,31 @@ long shotLandingRow = 0;
 long gameplayStartTime = 0;
 long gameplayTimeLimit = 10000;
 
+//levels
+int level = 1;
+//                    0      1     2     3      4      5      6      7      8      9     10       11
+int levelUpScore[]  = {0,  100,  300,  600,  1000,  1500,  2000,  2500,  3000,  3750,  4500,  100000};
+int levelUpAction[] = {0,    1,    2,    1,     2,     3,     1,     2,     1,     2,     1,       0};
+int levelUpValues[] = {0, 3500,    5, 3100,     4,     1,  2700,     3,  2300,     2,  2000,       0};
+
+//Actions:
+//  1.increase speed
+//  2.add fewer blocks on each new row
+//  3.blocks start droping and hitting the player
+//Values represent the new values given to the variables that represent the speed 
+//and the number of blocks per row
+int scoreMult = 10;
+bool levelBlinking = false;
+int levelBlinkDelay = 500;
+long levelBlinkStartTime = 0;
+long levelBlinkStopTime = 2000;
+bool fallingBlocks = false;
+
 //matrix and blocks
 int maxBlocksRow = 0;// how many rows are actually occupied by blocks
 int lastColumnNr = 7;// from 0 to 7
 int lastRowNr = 6;// row nr 7 is the player row
-int rowGeneratingTime = 5000;// time between generating two rows of blocks
+int rowGeneratingTime = 4000;// time between generating two rows of blocks
 long lastGeneratedRowTime = 0;
 int blocksPerRow = 6;// no of blocks per generated row
 int randomColumns[] = {0, 1, 2, 3, 4, 5, 6, 7}; // will be randomized for picking x random positions
@@ -142,6 +181,7 @@ const long oneColumnAtATime[] = {
                 1,
     };
 long blankRow = 100000000;
+long fullRow =  111111111;
 long blockRows[] = {
         100000000,
         100000000,
@@ -221,6 +261,17 @@ const uint8_t heartFilled[] = {
         0b00000,
         0b00000,
     };
+
+const uint8_t checked[] = {
+        0b00000,
+        0b00000,
+        0b00001,
+        0b00011,
+        0b10110,
+        0b11100,
+        0b01000,
+        0b00000,
+    };
  
 void setup()
 {
@@ -230,12 +281,15 @@ void setup()
   lcd.createChar (4, leftArrow);
   lcd.createChar (5, heartHollow);
   lcd.createChar (6, heartFilled);
+  lcd.createChar (7, checked);
   lcd.begin(16,2);
   lcd.setCursor(0, 0);
   // the zero refers to the MAX7219 number, it is zero for 1 chip
   lc.shutdown(0, false); // turn off power saving, enables display
   lc.setIntensity(0, 2); // sets brightness (0~15 possible values)
   lc.clearDisplay(0);// clear screen
+  pinMode(soundSwitchPin, INPUT_PULLUP);
+  pinMode(pinSoundLED, OUTPUT);
   pinMode(pinSW, INPUT_PULLUP);
   pinMode(pinX, INPUT);
   pinMode(pinY, INPUT);
@@ -261,18 +315,24 @@ void movePlayer(){
 
 void changeOption(){
   if(joyDown == true){
-      curOption += 1;
-      if(curOption == nrOptions)
-        curOption = 0;
-      lcdStateChange = 1;
+    if(soundOn){
+      tone(buzzPin, changeOptionSound, buzzChangeOptionDuration);
     }
-    if(joyUp == true){
-      if(curOption > 0)
-        curOption -= 1;
-       else
-        curOption = nrOptions - 1;
-      lcdStateChange = 1;
+    curOption += 1;
+    if(curOption == nrOptions)
+      curOption = 0;
+    lcdStateChange = 1;
+  }
+  if(joyUp == true){
+    if(soundOn){
+      tone(buzzPin, changeOptionSound, buzzChangeOptionDuration);
     }
+    if(curOption > 0)
+      curOption -= 1;
+    else
+      curOption = nrOptions - 1;
+    lcdStateChange = 1;
+  }
 }
 
 void printStartMenu(){
@@ -311,7 +371,7 @@ void generateRow(){
   }
   blockRows[0] = newRow;
 }
-
+//turns on/off just the blocks in game
 void switchMatrix(bool val){
   //val == true  => turn on  matrix
   //val == false => turn off matrix
@@ -327,6 +387,24 @@ void switchMatrix(bool val){
       }
     }
   }
+  for(int k = maxBlocksRow + 1; k < lastColumnNr; k++){
+    for(int l = 0; l <= lastColumnNr; l++){
+      lc.setLed(0, k, l, false);
+    }
+  }
+}
+//turns on/off all leds of the matrix
+void turnMatrix(bool val){
+  //val == true  => turn on  matrix
+  //val == false => turn off matrix
+  for(int i = 0; i <= lastColumnNr; i++){
+    for(int j = 0; j <= lastColumnNr; j++){
+      lc.setLed(0, i, j, val);
+    }
+  }
+  if(stage == gameplayStage){
+    lc.setLed(0, playerRow, playerPos, true);
+  }
 }
 
 
@@ -337,6 +415,8 @@ void startGame(){
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Level: ");
+  lcd.setCursor(7, 0);
+  lcd.print(level);
   lcd.setCursor(13, 0);
   for(int i = 0; i < 3; i++){
     lcd.print ((char) 0x06);
@@ -348,18 +428,39 @@ void startGame(){
 }
 
 void play(){
-  Serial.println("play1");
   movePlayer();
-  Serial.println("play2");
   if(joyDown == true || maxBlocksRow > lastRowNr){
-    switchMatrix(false);
-    lc.setLed(0, playerRow, playerPos, false);
-    stage = gameOverStage;
-    gameOverTime = millis();
-    lcdStateChange = 1;
-    uploadScore();
+    gameOver();
   }
-  Serial.println("play3");
+  if(score > levelUpScore[level]){
+    if(levelUpAction[level] == 1){
+      rowGeneratingTime = levelUpValues[level];
+    }
+    if(levelUpAction[level] == 2){
+      blocksPerRow = levelUpValues[level];
+    }
+    if(levelUpAction[level] == 3){
+      fallingBlocks = levelUpValues[level];
+    }
+    level++;
+    levelBlinking = true;
+    levelBlinkStartTime = millis();
+  }
+  if(levelBlinking){
+    if(millis() % levelBlinkDelay > levelBlinkDelay / 2){
+      lcd.setCursor(7, 0);
+      lcd.print(level);
+    }else{
+      lcd.setCursor(7, 0);
+      lcd.print("   ");
+    }
+    if(millis() - levelBlinkStartTime > levelBlinkStopTime){
+      levelBlinking = false;
+      lcd.setCursor(7, 0);
+      lcd.print(level);
+    }
+    
+  }
   if(shotActive){
     if(millis() - lastShotMove > shotDelay){
       lastShotMove = millis();
@@ -367,59 +468,119 @@ void play(){
       shotRow -= 1;
       if(shotRow >= shotLandingRow)
         lc.setLed(0, shotRow, shotCol, true);
-      else
+      else{
+        turnMatrix(false);
+        addBlock();
         shotActive = 0;
+        clearLine();
         switchMatrix(true);
+        Serial.println("    Dupa:");
+        for(int i = 0; i < lastColumnNr; i++){
+          Serial.println(blockRows[i]);
+        }
+        Serial.println("");
+        Serial.println("");
+      }
     }
   }
-  Serial.println("play4");
   if(clicked && !shotActive){
+    Serial.println("    Inainte:");
+    for(int i = 0; i < lastColumnNr; i++){
+      Serial.println(blockRows[i]);
+    }
+    Serial.print("playerPos: ");
+    Serial.println(playerPos);
     clicked = false;
-    shotActive = 1;
     shotRow = 6; // the row the shot appears on;
+    shotCol = playerPos;
+    shotLandingRow = calculateShotLandingRow();
+    Serial.print("shotLandingRow: ");
+    Serial.println(shotLandingRow);
+    shotActive = 1;
     score++;
-    calculateShotLandingRow();
     lcd.setCursor(10, 1);
     lcd.print(score);
     lastShotMove = millis();
-    shotCol = playerPos;
     lc.setLed(0, shotRow, shotCol, true);
   }
-  Serial.println("play5");
   if(millis() - lastGeneratedRowTime > rowGeneratingTime && !shotActive){
-    Serial.println("test1");
     switchMatrix(false);
-    Serial.println("test2");
     generateRow();
-    Serial.println("test3");
     lastGeneratedRowTime = millis();
-    Serial.println("test4");
     switchMatrix(true);
-    Serial.println("test5");
   }
-  Serial.println("play6");
   
 }
 
-void calculateShotLandingRow(){
-  int curRow = shotRow;
+void gameOver(){
+  turnMatrix(false);
+  lc.setLed(0, playerRow, playerPos, false);
+  stage = gameOverStage;
+  gameOverTime = millis();
+  lcdStateChange = 1;
+  uploadScore();
+  for(int i = 0; i < lastColumnNr; i++){
+    blockRows[i] = blankRow;
+  }
+  level = 1;
+  levelBlinking = false;
+  fallingBlocks = false;
+  blocksPerRow = 6;
+  rowGeneratingTime = 4000;
+  playerPos = 4;
+  shotActive = 0;
+  maxBlocksRow = 0;
+}
+
+int calculateShotLandingRow(){
+  int curRowNr = maxBlocksRow + 1;
   int block;
-  int divider;
-  while(curRow > 0){
-    long nextRow = blockRows[curRow - 1];
-    divider = 10^(lastColumnNr - shotCol);
+  long divider;
+  while(curRowNr > 0){
+    long nextRow = blockRows[curRowNr - 1];
+    divider = power(10,(lastColumnNr - shotCol));
     block = nextRow/divider%10;
-    if(block){
-      break;
+    if(block >= 1){
+      return curRowNr;
     }else{
-      curRow --;
+      curRowNr --;
     }
   }
-  shotLandingRow = curRow;
+  return curRowNr;
+}
+
+//calculate x to the power of y
+long power(int x, int y){
+  long result = 1;
+  for (int i = 0; i < y; i++){
+    result = result * x;
+  }
+  return result;
 }
 
 void addBlock(){
+  if(shotLandingRow > maxBlocksRow){
+    maxBlocksRow ++;
+  }
   blockRows[shotLandingRow] += oneColumnAtATime[shotCol];
+}
+
+void clearLine(){
+  for(int i = 0; i < lastColumnNr; i++){
+    if(blockRows[i] == fullRow){
+      score += level * scoreMult;
+      lcd.setCursor(10, 1);
+      lcd.print(score);
+      switchMatrix(false);
+      blockRows[i] = blankRow;
+      for(int j = i; j < lastColumnNr - 1; j++){
+        blockRows[j] = blockRows[j + 1];
+      }
+      blockRows[lastColumnNr - 1] = blankRow;
+      switchMatrix(true);
+      maxBlocksRow--;
+    }
+  }
 }
 
 void downloadHighScores(){
@@ -438,15 +599,19 @@ void downloadHighScores(){
 
 void downloadSettings(){
   contrastLevel = EEPROM.read(contrastAddress);
-  brightnessLevel = EEPROM.read(brightnessAddress);
+  LCDBrightnessLevel = EEPROM.read(LCDBrightnessAddress);
+  matrixBrightnessLevel = EEPROM.read(matrixBrightnessAddress);
   soundOn = EEPROM.read(soundAddress);
+  digitalWrite(pinSoundLED, soundOn);
   analogWrite(contrastPin, contrastOffset + contrastMult * contrastLevel);
-  analogWrite(brightnessPin, brightnessOffset + brightnessMult * brightnessLevel);
+  analogWrite(brightnessPin, LCDBrightnessOffset + brightnessMult * LCDBrightnessLevel);
+  lc.setIntensity(0, matrixBrightnessLevel + matrixBrightnessOffset);
 }
 
 void uploadSettings(){
   EEPROM.write(contrastAddress, contrastLevel);
-  EEPROM.write(brightnessAddress, brightnessLevel);
+  EEPROM.write(LCDBrightnessAddress, LCDBrightnessLevel);
+  EEPROM.write(matrixBrightnessAddress, matrixBrightnessLevel);
   EEPROM.write(soundAddress, soundOn);
 }
 
@@ -489,6 +654,10 @@ void changeNameChar(){
   int c = int(curNameChar); //ASCII code of the character
   
   if(joyDown == true){
+    if(soundOn){
+      tone(buzzPin, changeOptionSound, buzzChangeOptionDuration);
+    }
+      
       if(c == 32 || c == 65){ //ASCII code for space
         c = 90; //ASCII code for Z
       }
@@ -496,6 +665,10 @@ void changeNameChar(){
         c --;
     }
     if(joyUp == true){
+      if(soundOn){
+        tone(buzzPin, changeOptionSound, buzzChangeOptionDuration);
+      }
+      
       if(c == 32 || c == 90){ //ASCII code for space
         c = 65; //ASCII code for A
       }
@@ -531,10 +704,17 @@ void showHighScores(){
     lcd.print(highScores[highScoreInFocus + 1]);
     }
   if(joyUp && highScoreInFocus > 0){
+    if(soundOn){
+      tone(buzzPin, changeOptionSound, buzzChangeOptionDuration);
+    }
+    
     highScoreInFocus --;
     lcdStateChange = 1;
   }
   if(joyDown && highScoreInFocus < nrOfHighScores - 2){
+    if(soundOn){
+      tone(buzzPin, changeOptionSound, buzzChangeOptionDuration);
+    }
     highScoreInFocus ++;
     lcdStateChange = 1;
   }
@@ -544,6 +724,7 @@ void joyStickListener(){
   xValue = analogRead(pinX);
   yValue = analogRead(pinY);
   switchState = digitalRead(pinSW);
+  soundSwitchValue = digitalRead(soundSwitchPin);
   //x-axys
   if(xValue < minThreshold && joyMovedX == false){
       joyDown = true;
@@ -573,10 +754,39 @@ void joyStickListener(){
       joyLeft = false;
       joyRight = false;
     }
-  // button
+  // joystick switch
   if(switchState == HIGH && lastSwitchState == LOW){
     clicked = true;
   }
+  lastSwitchState = switchState;
+
+  // sound switch
+  if(soundSwitchValue == LOW && lastSoundSwitchValue == HIGH){
+    soundOn = !soundOn;
+    EEPROM.write(soundAddress, soundOn);
+    digitalWrite(pinSoundLED, soundOn);
+    if(stage == settingStage){
+      if(curSetting == 0){
+        lcd.setCursor(13, 0);
+        lcd.print("   ");
+        lcd.setCursor(13, 0);
+        if(soundOn){
+          lcd.print("ON");
+        }else
+          lcd.print("OFF");
+      }
+      if(curSetting == 3){
+        lcd.setCursor(13, 1);
+        lcd.print("   ");
+        lcd.setCursor(13, 1);
+        if(soundOn){
+          lcd.print("ON");
+        }else
+          lcd.print("OFF");
+      }
+    }
+  }
+  lastSoundSwitchValue = soundSwitchValue;
   lastSwitchState = switchState;
 }
 
@@ -591,8 +801,22 @@ void gameOverScreen(){
     lcd.print(score);
   }
   if(clicked && millis() - gameOverTime > gameOverScreenDelay){
+    if(soundOn){
+      tone(buzzPin, menuClickSound, buzzClickDuration);
+    }
+    
     stage = gameMenuStage;
     lcdStateChange = 1;
+    score = 0;
+  }
+  if(millis() - gameOverTime > gameOverScreenDelay){
+    if(clicked){
+      stage = gameMenuStage;
+      lcdStateChange = 1;
+      score = 0;
+    }
+    lcd.setCursor(15, 0);
+    lcd.print ((char) 0x07);
   }
 }
 
@@ -628,7 +852,12 @@ void setingsScreen(){
     else
         lcd.print(settingValue(nextSetting));
   }
-  if(joyUp && curSetting > 0){
+  turnMatrix(curSetting == 3);
+  if(joyUp){
+    if(soundOn){
+      tone(buzzPin, changeOptionSound, buzzChangeOptionDuration);
+    }
+    
     if(curSetting == 0)
       curSetting = nrOfSettings - 1;
     else
@@ -636,36 +865,56 @@ void setingsScreen(){
     lcdStateChange = 1;
   }
   if(joyDown){
+    if(soundOn){
+      tone(buzzPin, changeOptionSound, buzzChangeOptionDuration);
+    }
+    
     curSetting = nextSetting;
     lcdStateChange = 1;
   }
   if(joyRight){
     if(curSetting == 0){
       soundOn = !soundOn;
+      digitalWrite(pinSoundLED, soundOn);
     }
     if(curSetting == 1 && contrastLevel < 10){
       contrastLevel ++;
       analogWrite(contrastPin, contrastOffset + contrastMult * contrastLevel);
     }
-    if(curSetting == 2 && brightnessLevel < 10){
-      brightnessLevel ++;
-      analogWrite(brightnessPin, brightnessOffset + brightnessMult * brightnessLevel);
+    if(curSetting == 2 && LCDBrightnessLevel < 10){
+      LCDBrightnessLevel ++;
+      analogWrite(brightnessPin, LCDBrightnessOffset + brightnessMult * LCDBrightnessLevel);
+    }
+    if(curSetting == 3 && matrixBrightnessLevel < 10){
+      matrixBrightnessLevel ++;
+      lc.setIntensity(0, matrixBrightnessLevel + matrixBrightnessOffset);
     }
     lcdStateChange = 1;
+    if(soundOn){
+      tone(buzzPin, changeSettingSound, buzzChangeSettingDuration);
+    }
   }
   if(joyLeft){
     if(curSetting == 0){
       soundOn = !soundOn;
+      digitalWrite(pinSoundLED, soundOn);
     }
     if(curSetting == 1 && contrastLevel > 0){
       contrastLevel --;
       analogWrite(contrastPin, contrastOffset + contrastMult * contrastLevel);
     }
-    if(curSetting == 2 && brightnessLevel > 0){
-      brightnessLevel --;
-      analogWrite(brightnessPin, brightnessOffset + brightnessMult * brightnessLevel);
+    if(curSetting == 2 && LCDBrightnessLevel > 0){
+      LCDBrightnessLevel --;
+      analogWrite(brightnessPin, LCDBrightnessOffset + brightnessMult * LCDBrightnessLevel);
+    }
+    if(curSetting == 3 && matrixBrightnessLevel > 0){
+      matrixBrightnessLevel --;
+      lc.setIntensity(0, matrixBrightnessLevel + matrixBrightnessOffset);
     }
     lcdStateChange = 1;
+    if(soundOn){
+      tone(buzzPin, changeSettingSound, buzzChangeSettingDuration);
+    }
   }
 }
 
@@ -673,12 +922,25 @@ int settingValue(int settingIndex){
     if(settingIndex == 1)
         return contrastLevel;
     if(settingIndex == 2)
-        return brightnessLevel;
+        return LCDBrightnessLevel;
+    if(settingIndex == 3)
+        return matrixBrightnessLevel;
 }
 
+void deleteHighScores(){
+  for(int i = 0; i < nrOfHighScores; i++){
+    highScoresNames[i] = "";
+    highScores[i] = 0;
+  }
+  uploadScore();
+  lcd.setCursor(0, 1);
+  lcd.print ((char) 0x07);
+  delay(500);
+  lcd.setCursor(0, 1);
+  lcd.print (" ");
+}
 void loop(){
   joyStickListener();
-  
   if(!highScoresInitialized){
     downloadHighScores();
     downloadSettings();
@@ -701,6 +963,10 @@ void loop(){
       clicked = false; // set clicked to false in case the button was pressed before the animation finished 
     }
     if(clicked){
+      if(soundOn){
+        tone(buzzPin, menuClickSound, buzzClickDuration);
+      }
+      
       clicked = false;
       lcd.clear();
       stage = enterNameStage1;
@@ -719,6 +985,10 @@ void loop(){
   if(stage == enterNameStage2){
     changeNameChar();
     if(clicked){
+      if(soundOn){
+        tone(buzzPin, menuClickSound, buzzClickDuration);
+      }
+      
       if(curNameChar == ' '){
         stage = gameMenuStage;
       }else{
@@ -744,6 +1014,10 @@ void loop(){
       lcdStateChange = 0;
     }
     if(clicked){
+      if(soundOn){
+        tone(buzzPin, menuClickSound, buzzClickDuration);
+      }
+      
       clicked = false;
       if(curOption == startGameOption){
         startGame();
@@ -764,12 +1038,19 @@ void loop(){
         lcdStateChange = 1;
         stage = settingStage;
       }
+      if(curOption == deleteScoresOption){
+        deleteHighScores();
+      }
     }
     changeOption();
   }
   if(stage == highScoreStage){
     showHighScores();
     if(clicked){
+      if(soundOn){
+        tone(buzzPin, menuClickSound, buzzClickDuration);
+      }
+      
       stage = gameMenuStage;
       lcdStateChange = 1;
     }
@@ -780,7 +1061,12 @@ void loop(){
   if(stage == settingStage){
     setingsScreen();
     if(clicked){
+      if(soundOn){
+        tone(buzzPin, menuClickSound, buzzClickDuration);
+      }
+      
       lcdStateChange = 1;
+      turnMatrix(false);
       uploadSettings();
       stage = gameMenuStage;
     }
