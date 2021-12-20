@@ -585,7 +585,7 @@ void clearLine(){
 
 void downloadHighScores(){
   for(int i = 0; i < nrOfHighScores; i++){
-    highScores[i] = EEPROM.read(i * highScoresOffset);
+    EEPROM.get(i * highScoresOffset, highScores[i]);
     int hsNameLen = EEPROM.read((i + 1) * highScoresNamesOffset);
     char hsChar;
     String hsName = "";
@@ -609,7 +609,7 @@ void downloadSettings(){
 }
 
 void uploadSettings(){
-  EEPROM.write(contrastAddress, contrastLevel);
+  EEPROM.put(contrastAddress, contrastLevel);
   EEPROM.write(LCDBrightnessAddress, LCDBrightnessLevel);
   EEPROM.write(matrixBrightnessAddress, matrixBrightnessLevel);
   EEPROM.write(soundAddress, soundOn);
@@ -637,7 +637,7 @@ void uploadScore(){
     }
   }
   for(int i = 0; i < nrOfHighScores; i++){
-    EEPROM.write(i * highScoresOffset, highScores[i]);
+    EEPROM.put(i * highScoresOffset, highScores[i]);
     //String hsName = highScoresNames[i];
     int hsNameLen = highScoresNames[i].length();
     char c;
@@ -939,6 +939,8 @@ void deleteHighScores(){
   lcd.setCursor(0, 1);
   lcd.print (" ");
 }
+
+
 void loop(){
   joyStickListener();
   if(!highScoresInitialized){
