@@ -21,6 +21,8 @@ int LCDBrightnessOffset = 50;
 int LCDBrightnessAddress = 70; //EEPROM address
 LiquidCrystal lcd(RS,enable, d4, d5, d6, d7);
 int lcdStateChange = 1;
+int LCDColumnNo = 16;
+int LCDRowNo = 2;
 
 //Matrix pins
 const int dinPin = 12;
@@ -41,6 +43,15 @@ int buzzChangeOptionDuration = 30;
 int changeOptionSound = 8000;
 int buzzChangeSettingDuration = 30;
 int changeSettingSound = 4000;
+int buzzMovePlayerDuration = 20;
+int movePlayerSound = 3000;
+long shotTime = 0;
+int shotSoundOffset = 4000;
+int shotSoundMult = 20;
+int shotSoundDuration = 100;
+bool shotSoundActive = false;
+int buzzClearLineSoundDuration = 100;
+int clearLineSound = 500;
 
 //start menu screen related values
 String texts[] = {"Welcome to", "Mike's BrickShot", "Click to enter"};
@@ -110,7 +121,7 @@ long lastButtonPress = 0;
 const long buttonPressDelay = 200;
 
 //game stage values
-int stage = 0;
+int stage = 3;
 const int welcomeScreenStage = 0;
 const int enterNameStage1 = 1;
 const int enterNameStage2 = 2;
@@ -275,6 +286,7 @@ const uint8_t checked[] = {
  
 void setup()
 {
+  lcd.begin(LCDColumnNo, LCDRowNo);
   lcd.createChar (1, upArrow);
   lcd.createChar (2, downArrow);
   lcd.createChar (3, rightArrow);
@@ -282,7 +294,6 @@ void setup()
   lcd.createChar (5, heartHollow);
   lcd.createChar (6, heartFilled);
   lcd.createChar (7, checked);
-  lcd.begin(16,2);
   lcd.setCursor(0, 0);
   // the zero refers to the MAX7219 number, it is zero for 1 chip
   lc.shutdown(0, false); // turn off power saving, enables display
@@ -304,12 +315,18 @@ void movePlayer(){
       if(playerPos > 0)
         playerPos -= 1;
       lc.setLed(0, playerRow, playerPos, true); // turns on LED at col, row
+      if(soundOn){
+        tone(buzzPin, movePlayerSound, buzzMovePlayerDuration);
+      }
     }
     if(joyRight == true){
       lc.setLed(0, playerRow, playerPos, false); // turns on LED at col, row
       if(playerPos < 7)
         playerPos += 1;
       lc.setLed(0, playerRow, playerPos, true); // turns on LED at col, row
+      if(soundOn){
+        tone(buzzPin, movePlayerSound, buzzMovePlayerDuration);
+      }
     }
 }
 
@@ -462,6 +479,13 @@ void play(){
     
   }
   if(shotActive){
+    if(millis() - shotTime < shotSoundDuration){
+      tone(buzzPin, shotSoundOffset - (millis() - shotTime) * shotSoundMult);
+    }
+    else if(shotSoundActive){
+      shotSoundActive = false;
+      noTone(buzzPin);
+    }
     if(millis() - lastShotMove > shotDelay){
       lastShotMove = millis();
       lc.setLed(0, shotRow, shotCol, false);
@@ -479,6 +503,10 @@ void play(){
   }
   if(clicked && !shotActive){
     clicked = false;
+    if(soundOn){
+      shotTime = millis();
+      shotSoundActive = true;
+    }
     shotRow = 6; // the row the shot appears on;
     shotCol = playerPos;
     shotLandingRow = calculateShotLandingRow();
@@ -495,8 +523,8 @@ void play(){
     lastGeneratedRowTime = millis();
     switchMatrix(true);
   }
-  
 }
+
 
 void gameOver(){
   turnMatrix(false);
@@ -554,6 +582,9 @@ void addBlock(){
 void clearLine(){
   for(int i = 0; i < lastColumnNr; i++){
     if(blockRows[i] == fullRow){
+      if(soundOn){
+        tone(buzzPin, clearLineSound, buzzClearLineSoundDuration);
+      }
       score += level * scoreMult;
       lcd.setCursor(10, 1);
       lcd.print(score);
@@ -935,7 +966,7 @@ int settingValue(int settingIndex){
 
 void deleteHighScores(){
   for(int i = 0; i < nrOfHighScores; i++){
-    highScoresNames[i] = "";
+    highScoresNames[i] = "name";
     highScores[i] = 0;
   }
   uploadScore();
@@ -1059,6 +1090,11 @@ void joyStickReset(){
 }
 
 void loop(){
+  if (Serial.available() > 0) {
+    // read the incoming byte:
+    int shotSound = Serial.read();
+    Serial.println("Shot sound updated");
+  }
   joyStickListener();
   initialDownload();
   switch(stage){
