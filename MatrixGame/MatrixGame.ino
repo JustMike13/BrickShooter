@@ -13,12 +13,12 @@ const int contrastPin = 9;
 int contrastLevel;// contrast = level * multiplier
 int contrastMult = 10;
 int contrastOffset = 50;
-int contrastAddress = 50; //EEPROM address
+int contrastAddress = 60; //EEPROM address
 const int brightnessPin = 10;
 int LCDBrightnessLevel;
 int brightnessMult = 20;
 int LCDBrightnessOffset = 50;
-int LCDBrightnessAddress = 60; //EEPROM address
+int LCDBrightnessAddress = 70; //EEPROM address
 LiquidCrystal lcd(RS,enable, d4, d5, d6, d7);
 int lcdStateChange = 1;
 
@@ -31,7 +31,7 @@ const int cols = 8;
 LedControl lc = LedControl(dinPin, clockPin, loadPin, 1); //DIN, CLK, LOAD, No. DRIVER
 const int matrixBrightnessOffset = 0;
 int matrixBrightnessLevel = 6;
-int matrixBrightnessAddress = 65;
+int matrixBrightnessAddress = 80;
 
 //buzzer
 int buzzPin = A3;
@@ -77,7 +77,7 @@ int pinSoundLED = 3;
 int curSetting = 0;
 int nrOfSettings = 4;
 bool soundOn = 1;
-int soundAddress = 70;//EEPROM address
+int soundAddress = 90;//EEPROM address
 String settingsMenu[] = {"Sound", "Contrast", "LCD bri.", "Matrix bri."};
 const int settingsOption = 2;
 const int changeNameOption = 3;
@@ -194,8 +194,8 @@ long blockRows[] = {
 
 //eeprom and high scores
 const int nrOfHighScores = 3;
-int highScoresOffset = 2; // scorurile se afla pe pozitiile 0, 2 si 4
-int highScoresNamesOffset = 10; // numele incep de pe pozitiile 10, 20 si 30
+int highScoresOffset = 4; // scorurile se afla pe pozitiile 0, 4 si 8
+int highScoresNamesOffset = 20; // numele incep de pe pozitiile 20, 30 si 40
 String highScoresNames[nrOfHighScores];
 long highScores[nrOfHighScores];
 int highScoresInitialized = 0;
