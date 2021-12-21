@@ -1061,29 +1061,31 @@ void joyStickReset(){
 void loop(){
   joyStickListener();
   initialDownload();
-  if(stage == welcomeScreenStage){
-    welcomeScreen();
-  }
-  if(stage == enterNameStage1){
-    initializeEnterNameScreen();
-  }
-  if(stage == enterNameStage2){
-    enterName();
-  }
-  if(stage == gameplayStage){
-    play();
-  }
-  if(stage == highScoreStage){
-    showHighScores();
-  }
-  if(stage == gameOverStage){
-    gameOverScreen();
-  }
-  if(stage == settingStage){
-    setingsScreen();
-  }
-  if(stage == gameMenuStage){
-    gameMenu();
+  switch(stage){
+    case welcomeScreenStage:
+      welcomeScreen();
+      break;
+    case enterNameStage1:
+      initializeEnterNameScreen();
+      break;
+    case enterNameStage2:
+      enterName();
+      break;
+    case gameplayStage:
+      play();
+      break;
+    case highScoreStage:
+      showHighScores();
+      break;
+    case gameOverStage:
+      gameOverScreen();
+      break;
+    case settingStage:
+      setingsScreen();
+      break;
+    case gameMenuStage:
+      gameMenu();
+      break;
   }
   joyStickReset();
 }
