@@ -474,28 +474,14 @@ void play(){
         shotActive = 0;
         clearLine();
         switchMatrix(true);
-        Serial.println("    Dupa:");
-        for(int i = 0; i < lastColumnNr; i++){
-          Serial.println(blockRows[i]);
-        }
-        Serial.println("");
-        Serial.println("");
       }
     }
   }
   if(clicked && !shotActive){
-    Serial.println("    Inainte:");
-    for(int i = 0; i < lastColumnNr; i++){
-      Serial.println(blockRows[i]);
-    }
-    Serial.print("playerPos: ");
-    Serial.println(playerPos);
     clicked = false;
     shotRow = 6; // the row the shot appears on;
     shotCol = playerPos;
     shotLandingRow = calculateShotLandingRow();
-    Serial.print("shotLandingRow: ");
-    Serial.println(shotLandingRow);
     shotActive = 1;
     score++;
     lcd.setCursor(10, 1);
@@ -683,6 +669,14 @@ void changeNameChar(){
 
 
 void showHighScores(){
+  if(clicked){
+    if(soundOn){
+      tone(buzzPin, menuClickSound, buzzClickDuration);
+    }
+    stage = gameMenuStage;
+    printStartMenu();
+    clicked = false;
+  }
   if(lcdStateChange){
     lcdStateChange = 0;
     lcd.clear();
@@ -808,6 +802,8 @@ void gameOverScreen(){
     stage = gameMenuStage;
     lcdStateChange = 1;
     score = 0;
+    
+    clicked = false;
   }
   if(millis() - gameOverTime > gameOverScreenDelay){
     if(clicked){
@@ -821,6 +817,16 @@ void gameOverScreen(){
 }
 
 void setingsScreen(){
+  if(clicked){
+    if(soundOn){
+      tone(buzzPin, menuClickSound, buzzClickDuration);
+    }
+    turnMatrix(false);
+    uploadSettings();
+    stage = gameMenuStage;
+    clicked = false;
+    printStartMenu();
+  }
   if(lcdStateChange){
     lcdStateChange = 0;
     lcd.clear();
@@ -940,16 +946,16 @@ void deleteHighScores(){
   lcd.print (" ");
 }
 
-
-void loop(){
-  joyStickListener();
+void initialDownload(){
   if(!highScoresInitialized){
     downloadHighScores();
     downloadSettings();
     highScoresInitialized = 1;
   }
-  if(stage == welcomeScreenStage){
-    while(curText < nrTexts){
+}
+
+void welcomeScreen(){
+  while(curText < nrTexts){
       if(curText > 1){
         lcd.clear();
         lcd.setCursor(0, 0);
@@ -962,120 +968,122 @@ void loop(){
       }
       curText += 1;
       lcd.setCursor(0, 1);
-      clicked = false; // set clicked to false in case the button was pressed before the animation finished 
     }
     if(clicked){
       if(soundOn){
         tone(buzzPin, menuClickSound, buzzClickDuration);
       }
       
-      clicked = false;
       lcd.clear();
       stage = enterNameStage1;
     }
+}
+
+void initializeEnterNameScreen(){
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Enter name:");
+  lcd.setCursor(curNamePos + 1, 1);
+  lcd.print((char) 0x04);
+  lcd.setCursor(curNamePos, 1);
+  lcd.print(curNameChar);
+  stage = enterNameStage2;
+}
+
+void enterName(){
+  changeNameChar();
+  if(clicked){
+    if(soundOn){
+      tone(buzzPin, menuClickSound, buzzClickDuration);
+    }
+    if(curNameChar == ' '){
+      stage = gameMenuStage;
+    }else{
+      playerName = playerName + curNameChar;
+      curNameChar = ' ';
+      curNamePos++;
+      lcd.setCursor(curNamePos, 1);
+      lcd.print(curNameChar);
+      lcd.print((char) 0x04);
+    }
+    clicked = false;
+  }
+  if(playerName.length() == maxNameLen)
+    stage = gameMenuStage;
+}
+
+void gameMenu(){
+  if(lcdStateChange == 1){
+    printStartMenu();
+    lcdStateChange = 0;
+  }
+  if(millis()%10000 > 9000){
+  }
+  
+  if(clicked){
+    if(soundOn){
+      tone(buzzPin, menuClickSound, buzzClickDuration);
+    }
+    if(curOption == startGameOption){
+      startGame();
+    }
+    if(curOption == highScoresOption){
+      highScoreInFocus = 0;
+      stage = highScoreStage;
+      lcdStateChange = 1;
+    }
+    if(curOption == changeNameOption){
+      lcdStateChange = 1;
+      playerName = "";
+      curNameChar = ' ';
+      curNamePos = 0;
+      stage = enterNameStage1;
+    }
+    if(curOption == settingsOption){
+      lcdStateChange = 1;
+      stage = settingStage;
+    }
+    if(curOption == deleteScoresOption){
+      deleteHighScores();
+    }
+  }
+  changeOption();
+}
+
+void joyStickReset(){
+  joyUp = false;
+  joyDown = false;
+  joyLeft = false;
+  joyRight = false;
+  clicked = false;
+}
+
+void loop(){
+  joyStickListener();
+  initialDownload();
+  if(stage == welcomeScreenStage){
+    welcomeScreen();
   }
   if(stage == enterNameStage1){
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("Enter name:");
-    lcd.setCursor(curNamePos + 1, 1);
-    lcd.print((char) 0x04);
-    lcd.setCursor(curNamePos, 1);
-    lcd.print(curNameChar);
-    stage = enterNameStage2;
+    initializeEnterNameScreen();
   }
   if(stage == enterNameStage2){
-    changeNameChar();
-    if(clicked){
-      if(soundOn){
-        tone(buzzPin, menuClickSound, buzzClickDuration);
-      }
-      
-      if(curNameChar == ' '){
-        stage = gameMenuStage;
-      }else{
-        playerName = playerName + curNameChar;
-        curNameChar = ' ';
-        curNamePos++;
-        lcd.setCursor(curNamePos, 1);
-        lcd.print(curNameChar);
-        lcd.print((char) 0x04);
-      }
-      clicked = false;
-    }
-    if(playerName.length() == maxNameLen)
-      stage = gameMenuStage;
-    
+    enterName();
   }
   if(stage == gameplayStage){
     play();
   }
-  if(stage == gameMenuStage){
-    if(lcdStateChange){
-      printStartMenu();
-      lcdStateChange = 0;
-    }
-    if(clicked){
-      if(soundOn){
-        tone(buzzPin, menuClickSound, buzzClickDuration);
-      }
-      
-      clicked = false;
-      if(curOption == startGameOption){
-        startGame();
-      }
-      if(curOption == highScoresOption){
-        lcdStateChange = 1;
-        stage = highScoreStage;
-        highScoreInFocus = 0;
-      }
-      if(curOption == changeNameOption){
-        lcdStateChange = 1;
-        playerName = "";
-        curNameChar = ' ';
-        curNamePos = 0;
-        stage = enterNameStage1;
-      }
-      if(curOption == settingsOption){
-        lcdStateChange = 1;
-        stage = settingStage;
-      }
-      if(curOption == deleteScoresOption){
-        deleteHighScores();
-      }
-    }
-    changeOption();
-  }
   if(stage == highScoreStage){
     showHighScores();
-    if(clicked){
-      if(soundOn){
-        tone(buzzPin, menuClickSound, buzzClickDuration);
-      }
-      
-      stage = gameMenuStage;
-      lcdStateChange = 1;
-    }
   }
   if(stage == gameOverStage){
     gameOverScreen();
   }
   if(stage == settingStage){
     setingsScreen();
-    if(clicked){
-      if(soundOn){
-        tone(buzzPin, menuClickSound, buzzClickDuration);
-      }
-      
-      lcdStateChange = 1;
-      turnMatrix(false);
-      uploadSettings();
-      stage = gameMenuStage;
-    }
   }
-  joyUp = false;
-  joyDown = false;
-  joyLeft = false;
-  joyRight = false;
-  clicked = false;
+  if(stage == gameMenuStage){
+    gameMenu();
+  }
+  joyStickReset();
 }
