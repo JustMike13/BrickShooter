@@ -63,8 +63,8 @@ const int charDisplayDelay = 150;
 const int textDisplayDelay = 500;
 //menu related values
 int curOption = 0; //pozitia optiunii din menuOptions 
-const int nrOptions = 5;
-String menuOptions[] = {"Start Game", "High Scores", "Settings", "Change Name", "Delete scores"}; // optiunile de selectie din meniu
+const int nrOptions = 7;
+String menuOptions[] = {"Start Game", "High Scores", "Settings", "Change Name", "Delete scores", "About", "Instructions"}; // optiunile de selectie din meniu
 const int startGameOption = 0;
 const int deleteScoresOption = 4;
 String current(){
@@ -131,6 +131,8 @@ const int optionStage = 5;
 const int gameplayStage = 6;
 const int gameOverStage = 7;
 const int settingStage = 8;
+const int aboutStage = 9;
+const int instructionsStage = 10;
 
 //game related values
 int playerPos = 4;
@@ -210,6 +212,26 @@ int highScoresNamesOffset = 20; // numele incep de pe pozitiile 20, 30 si 40
 String highScoresNames[nrOfHighScores];
 long highScores[nrOfHighScores];
 int highScoresInitialized = 0;
+
+//about screen
+int aboutOption = 5;
+int aboutMaxRow = 4;
+int curAboutPos = 0;
+String aboutRows[] = {"Author: ", "   Mihai Ristea", "Contact: ", "   mihai.ristea", "@s.unibuc.ro"};
+
+//instructions screen
+int instructionsOption = 6;
+int instructionsMaxRow = 8;
+int curInstructionsPos = 0;
+String instructionsRows[] = {"The player can",
+                            "shoot blocks in",
+                            "the empty",
+                            "spaces. When a",
+                            "line is full it",
+                            "disappears. The",
+                            "game ends when",
+                            "the lines reach",
+                            "the player."};
 
 //defining special characters
 const uint8_t upArrow[] = {
@@ -439,7 +461,13 @@ void startGame(){
     lcd.print ((char) 0x06);
   }
   lcd.setCursor(0, 1);
-  lcd.print("Score:");
+  if(playerName == ""){
+    lcd.print("name");
+  }else{
+    lcd.print(playerName);
+  }
+  lcd.setCursor(5, 1);
+  lcd.print(":");
   lcd.setCursor(10, 1);
   lcd.print(score);
 }
@@ -615,7 +643,7 @@ void downloadHighScores(){
 }
 
 void downloadSettings(){
-  contrastLevel = EEPROM.read(contrastAddress);
+  EEPROM.get(contrastAddress, contrastLevel);
   LCDBrightnessLevel = EEPROM.read(LCDBrightnessAddress);
   matrixBrightnessLevel = EEPROM.read(matrixBrightnessAddress);
   soundOn = EEPROM.read(soundAddress);
@@ -626,7 +654,7 @@ void downloadSettings(){
 }
 
 void uploadSettings(){
-  EEPROM.put(contrastAddress, contrastLevel);
+  EEPROM.write(contrastAddress, contrastLevel);
   EEPROM.write(LCDBrightnessAddress, LCDBrightnessLevel);
   EEPROM.write(matrixBrightnessAddress, matrixBrightnessLevel);
   EEPROM.write(soundAddress, soundOn);
@@ -1077,8 +1105,73 @@ void gameMenu(){
     if(curOption == deleteScoresOption){
       deleteHighScores();
     }
+    if(curOption == aboutOption){
+      lcdStateChange = 1;
+      curAboutPos = 0;
+      stage = aboutStage;
+    }
+    if(curOption == instructionsOption){
+      lcdStateChange = 1;
+      curInstructionsPos = 0;
+      stage = instructionsStage;
+    }
   }
   changeOption();
+}
+
+void aboutScreen(){
+  if(lcdStateChange){
+    lcd.clear();
+    lcd.setCursor(LCDColumnNo - 1, 0);
+    lcd.print((char) 0x01);
+    lcd.setCursor(LCDColumnNo - 1, 1);
+    lcd.print((char) 0x02);
+    lcd.setCursor(0, 0);
+    lcd.print(aboutRows[curAboutPos]);
+    lcd.setCursor(0, 1);
+    lcd.print(aboutRows[curAboutPos + 1]);
+    lcdStateChange = 0;
+  }
+  if(joyDown && curAboutPos < aboutMaxRow - 1){
+    curAboutPos ++;
+    lcdStateChange = 1;
+  }
+  if(joyUp && curAboutPos > 0){
+    curAboutPos --;
+    lcdStateChange = 1;
+  }
+  if(clicked){
+    lcdStateChange = 1;
+    stage = gameMenuStage;
+  }
+}
+
+
+void instructionsScreen(){
+  if(lcdStateChange){
+    lcd.clear();
+    lcd.setCursor(LCDColumnNo - 1, 0);
+    lcd.print((char) 0x01);
+    lcd.setCursor(LCDColumnNo - 1, 1);
+    lcd.print((char) 0x02);
+    lcd.setCursor(0, 0);
+    lcd.print(instructionsRows[curInstructionsPos]);
+    lcd.setCursor(0, 1);
+    lcd.print(instructionsRows[curInstructionsPos + 1]);
+    lcdStateChange = 0;
+  }
+  if(joyDown && curInstructionsPos < instructionsMaxRow - 1){
+    curInstructionsPos ++;
+    lcdStateChange = 1;
+  }
+  if(joyUp && curInstructionsPos > 0){
+    curInstructionsPos --;
+    lcdStateChange = 1;
+  }
+  if(clicked){
+    lcdStateChange = 1;
+    stage = gameMenuStage;
+  }
 }
 
 void joyStickReset(){
@@ -1093,7 +1186,6 @@ void loop(){
   if (Serial.available() > 0) {
     // read the incoming byte:
     int shotSound = Serial.read();
-    Serial.println("Shot sound updated");
   }
   joyStickListener();
   initialDownload();
@@ -1121,6 +1213,12 @@ void loop(){
       break;
     case gameMenuStage:
       gameMenu();
+      break;
+    case aboutStage:
+      aboutScreen();
+      break;
+    case instructionsStage:
+      instructionsScreen();
       break;
   }
   joyStickReset();
