@@ -268,9 +268,15 @@ int highScoresInitialized = 0;
 
 //about screen
 int aboutOption = 5;
-int aboutMaxRow = 4;
+int aboutMaxRow = 6;
 int curAboutPos = 0;
-String aboutRows[] = {"Author: ", "   Mihai Ristea", "Contact: ", "   mihai.ristea", "@s.unibuc.ro"};
+String aboutRows[] = {"BrickShooter",
+                      "Author: ",
+                      "   Mihai Ristea",
+                      "Github:",
+                      "    github.com/",
+                      "    JustMike13/",
+                      "   BrickShooter"};
 
 //instructions screen
 int instructionsOption = 6;
